@@ -1,4 +1,4 @@
-# app_simple.py - Main Streamlit application
+# app_simple.py - Fixed for Streamlit 1.28.0
 
 import streamlit as st
 import cv2
@@ -87,7 +87,7 @@ def main():
         use_face_detection = st.checkbox("Enable Face Detection", value=True)
         
         # Initialize detector button
-        if st.button("🚀 Initialize Detector", use_container_width=True):
+        if st.button("🚀 Initialize Detector"):
             with st.spinner("Initializing detector (this may take a moment)..."):
                 st.session_state.detector = init_detector(
                     model_path, threshold, use_face_detection
@@ -124,7 +124,7 @@ def main():
                 accuracy = (st.session_state.real_count / st.session_state.total_predictions) * 100
                 st.metric("Real %", f"{accuracy:.1f}%")
         
-        if st.button("📈 Reset Statistics", use_container_width=True):
+        if st.button("📈 Reset Statistics"):
             st.session_state.total_predictions = 0
             st.session_state.real_count = 0
             st.session_state.spoof_count = 0
@@ -164,9 +164,9 @@ def main():
         
         with col1:
             st.image(cv2.cvtColor(image, cv2.COLOR_BGR2RGB), 
-                    caption="Uploaded Image", use_container_width=True)
+                    caption="Uploaded Image", use_column_width=True)
         
-        if st.button("🔍 Detect Spoof", use_container_width=True, type="primary"):
+        if st.button("🔍 Detect Spoof", type="primary"):
             with st.spinner("Analyzing image..."):
                 # Update detector settings
                 st.session_state.detector.threshold = threshold
@@ -239,7 +239,7 @@ def main():
                 
                 with col2:
                     st.image(cv2.cvtColor(result_img, cv2.COLOR_BGR2RGB),
-                            caption="Detection Result", use_container_width=True)
+                            caption="Detection Result", use_column_width=True)
                     
                     # Show result cards
                     if class_name == "REAL":
