@@ -15,9 +15,7 @@ from collections import deque
 from pathlib import Path
 
 # ===== YOUR EXACT PATHS =====
-BASE_DIR = r"C:\Users\DELL\Downloads\spoof_detection_project"
-MODELS_DIR = os.path.join(BASE_DIR, "models")
-DEFAULT_MODEL = os.path.join(MODELS_DIR, "best_model.h5")
+DEFAULT_MODEL = "best_model.h5"
 # =============================
 
 class LiveSpoofDetector:
