@@ -1,4 +1,4 @@
-# app.py - Main Streamlit application for GitHub
+# app_simple.py - Streamlit app with WebRTC for online webcam
 
 import streamlit as st
 import cv2
@@ -8,6 +8,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, WebRtcMode
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -41,12 +42,19 @@ st.markdown("""
     .stButton > button {
         width: 100%;
     }
-    .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 10px;
+    .real-box {
+        background-color: #10b981;
         padding: 1rem;
-        color: white;
+        border-radius: 10px;
         text-align: center;
+        color: white;
+    }
+    .spoof-box {
+        background-color: #ef4444;
+        padding: 1rem;
+        border-radius: 10px;
+        text-align: center;
+        color: white;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -60,6 +68,68 @@ if 'spoof_count' not in st.session_state:
     st.session_state.spoof_count = 0
 if 'detector' not in st.session_state:
     st.session_state.detector = None
+if 'latest_prediction' not in st.session_state:
+    st.session_state.latest_prediction = None
+
+class VideoTransformer(VideoTransformerBase):
+    """Video transformer for real-time face spoof detection"""
+    
+    def __init__(self):
+        self.detector = None
+        self.threshold = 0.5
+        self.use_face_detection = True
+        
+    def set_detector(self, detector, threshold, use_face_detection):
+        self.detector = detector
+        self.threshold = threshold
+        self.use_face_detection = use_face_detection
+    
+    def transform(self, frame):
+        if self.detector is None:
+            return frame.to_ndarray(format="bgr24")
+        
+        # Get frame as numpy array
+        img = frame.to_ndarray(format="bgr24")
+        
+        # Make prediction
+        class_name, confidence, color, bbox, face_conf = self.detector.predict_frame(img)
+        
+        # Draw bounding box
+        if bbox is not None:
+            x, y, w, h = bbox
+            cv2.rectangle(img, (x, y), (x+w, y+h), color, 2)
+            
+            # Add corner markers
+            corner_len = 15
+            cv2.line(img, (x, y), (x+corner_len, y), color, 2)
+            cv2.line(img, (x, y), (x, y+corner_len), color, 2)
+            cv2.line(img, (x+w, y), (x+w-corner_len, y), color, 2)
+            cv2.line(img, (x+w, y), (x+w, y+corner_len), color, 2)
+            cv2.line(img, (x, y+h), (x+corner_len, y+h), color, 2)
+            cv2.line(img, (x, y+h), (x, y+h-corner_len), color, 2)
+            cv2.line(img, (x+w, y+h), (x+w-corner_len, y+h), color, 2)
+            cv2.line(img, (x+w, y+h), (x+w, y+h-corner_len), color, 2)
+        
+        # Add text
+        if class_name == "NO_FACE":
+            text = "No Face Detected"
+        else:
+            text = f"{class_name} ({confidence:.1f}%)"
+        
+        # Background for text
+        text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)[0]
+        cv2.rectangle(img, (10, 10), (10 + text_size[0] + 20, 45), (0, 0, 0), -1)
+        cv2.rectangle(img, (10, 10), (10 + text_size[0] + 20, 45), color, 2)
+        cv2.putText(img, text, (20, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+        
+        # Update session state for display
+        st.session_state.latest_prediction = {
+            'class': class_name,
+            'confidence': confidence,
+            'face_conf': face_conf
+        }
+        
+        return img
 
 def init_detector(model_path, threshold, use_face_detection):
     """Initialize the detector using your working class"""
@@ -138,7 +208,7 @@ def main():
         
         st.markdown("---")
         st.markdown("### ℹ️ About")
-        st.info("**Model:** MobileNetV3\n**Face Detector:** MTCNN")
+        st.info("**Model:** MobileNetV3\n**Face Detector:** MTCNN\n**Webcam:** WebRTC")
     
     # Main content
     if st.session_state.detector is None:
@@ -172,7 +242,7 @@ def main():
             
             with col1:
                 st.image(cv2.cvtColor(image, cv2.COLOR_BGR2RGB), 
-                        caption="Uploaded Image", use_column_width=True)
+                        caption="Uploaded Image", use_container_width=True)
             
             if st.button("🔍 Detect", use_container_width=True):
                 with st.spinner("Analyzing image..."):
@@ -205,7 +275,7 @@ def main():
                     
                     with col2:
                         st.image(cv2.cvtColor(result_img, cv2.COLOR_BGR2RGB),
-                                caption="Detection Result", use_column_width=True)
+                                caption="Detection Result", use_container_width=True)
                         
                         if class_name == "REAL":
                             st.success(f"✅ **{class_name}**")
@@ -218,94 +288,49 @@ def main():
                         else:
                             st.warning(f"❓ **{class_name}**")
     
-    # Tab 2: Live Webcam Detection
+    # Tab 2: Live Webcam Detection with WebRTC
     with tab2:
         st.markdown("### Live Webcam Detection")
+        st.info("📹 Click 'Start' to access your webcam. Works on mobile and desktop!")
         
-        camera_id = st.number_input("Camera ID", min_value=0, max_value=5, value=0, step=1)
+        # Create video transformer
+        ctx = webrtc_streamer(
+            key="spoof-detection",
+            mode=WebRtcMode.SENDRECV,
+            video_transformer_factory=VideoTransformer,
+            async_processing=True,
+            media_stream_constraints={"video": True, "audio": False},
+        )
         
-        col1, col2 = st.columns(2)
-        with col1:
-            start_btn = st.button("▶️ Start Webcam", use_container_width=True)
-        with col2:
-            stop_btn = st.button("⏹️ Stop Webcam", use_container_width=True)
+        # Update transformer with detector
+        if ctx.video_transformer:
+            ctx.video_transformer.set_detector(
+                st.session_state.detector, 
+                threshold, 
+                use_face_detection
+            )
         
-        video_placeholder = st.empty()
-        info_placeholder = st.empty()
-        fps_placeholder = st.empty()
-        
-        if start_btn and st.session_state.detector:
-            st.session_state.detector.threshold = threshold
-            st.session_state.detector.use_face_detection = use_face_detection
+        # Display real-time prediction info
+        if st.session_state.latest_prediction:
+            pred = st.session_state.latest_prediction
+            col1, col2, col3 = st.columns(3)
             
-            cap = cv2.VideoCapture(camera_id)
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            with col1:
+                if pred['class'] == "REAL":
+                    st.success(f"✅ **{pred['class']}**")
+                elif pred['class'] == "SPOOF":
+                    st.error(f"⚠️ **{pred['class']}**")
+                else:
+                    st.warning("❓ No Face")
             
-            if not cap.isOpened():
-                st.error("Could not open webcam")
-            else:
-                frame_count = 0
-                fps_start = time.time()
-                
-                while not stop_btn:
-                    ret, frame = cap.read()
-                    if not ret:
-                        break
-                    
-                    frame = cv2.flip(frame, 1)
-                    class_name, confidence, color, bbox, face_conf = \
-                        st.session_state.detector.predict_frame(frame)
-                    
-                    if class_name != "NO_FACE":
-                        st.session_state.total_predictions += 1
-                        if class_name == "REAL":
-                            st.session_state.real_count += 1
-                        elif class_name == "SPOOF":
-                            st.session_state.spoof_count += 1
-                    
-                    # Draw result
-                    result_frame = frame.copy()
-                    if bbox is not None:
-                        x, y, w, h = bbox
-                        cv2.rectangle(result_frame, (x, y), (x+w, y+h), color, 2)
-                    
-                    if class_name == "NO_FACE":
-                        text = "No Face Detected"
-                    else:
-                        text = f"{class_name} ({confidence:.1f}%)"
-                    
-                    text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.9, 2)[0]
-                    cv2.rectangle(result_frame, (10, 10), (10 + text_size[0] + 20, 50), 
-                                 (0, 0, 0), -1)
-                    cv2.rectangle(result_frame, (10, 10), (10 + text_size[0] + 20, 50), color, 2)
-                    cv2.putText(result_frame, text, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 
-                                0.9, color, 2)
-                    
-                    # FPS
-                    frame_count += 1
-                    if time.time() - fps_start >= 1.0:
-                        fps = frame_count
-                        fps_placeholder.metric("FPS", f"{fps}")
-                        frame_count = 0
-                        fps_start = time.time()
-                    
-                    video_placeholder.image(cv2.cvtColor(result_frame, cv2.COLOR_BGR2RGB),
-                                           channels="RGB", use_column_width=True)
-                    
-                    if class_name == "REAL":
-                        info_placeholder.success(f"✅ {class_name} ({confidence:.1f}%)")
-                    elif class_name == "SPOOF":
-                        info_placeholder.error(f"⚠️ {class_name} ({confidence:.1f}%)")
-                    else:
-                        info_placeholder.warning("❓ No Face Detected")
-                    
-                    time.sleep(0.03)
-                
-                cap.release()
-                video_placeholder.empty()
-                info_placeholder.empty()
-                fps_placeholder.empty()
+            with col2:
+                if pred['class'] != "NO_FACE":
+                    st.metric("Confidence", f"{pred['confidence']:.1f}%")
+                    st.progress(pred['confidence']/100)
+            
+            with col3:
+                if pred.get('face_conf', 0) > 0:
+                    st.metric("Face Confidence", f"{pred['face_conf']:.2f}")
 
 if __name__ == "__main__":
     main()
