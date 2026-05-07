@@ -77,9 +77,8 @@ def main():
         st.markdown("## ⚙️ Settings")
         
         # Model path - same as your working script
-        BASE_DIR = r"C:\Users\DELL\Downloads\spoof_detection_project"
-        MODELS_DIR = os.path.join(BASE_DIR, "models")
-        DEFAULT_MODEL = os.path.join(MODELS_DIR, "best_model.h5")
+        
+        DEFAULT_MODEL = "best_model.h5"
         
         model_path = st.text_input("Model Path", value=DEFAULT_MODEL)
         threshold = st.slider("Classification Threshold", 0.0, 1.0, 0.5, 0.05)
