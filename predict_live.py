@@ -1,6 +1,6 @@
 """
 Live webcam prediction script with MTCNN face detection
-Usage: python src/predict_live.py
+Usage: python predict_live.py
 """
 
 import os
@@ -14,9 +14,11 @@ import time
 from collections import deque
 from pathlib import Path
 
-# ===== YOUR EXACT PATHS =====
-DEFAULT_MODEL = "best_model.h5"
-# =============================
+# ===== GITHUB PATHS - Model in same directory =====
+# Get the directory where this script is located
+SCRIPT_DIR = Path(__file__).parent.absolute()
+DEFAULT_MODEL = os.path.join(SCRIPT_DIR, "best_model.h5")
+# ====================================================
 
 class LiveSpoofDetector:
     def __init__(self, model_path, threshold=0.5, use_face_detection=True, 
@@ -205,16 +207,12 @@ class LiveSpoofDetector:
             
             # Add corner markers
             corner_len = 15
-            # Top-left
             cv2.line(frame, (x, y), (x+corner_len, y), color, 2)
             cv2.line(frame, (x, y), (x, y+corner_len), color, 2)
-            # Top-right
             cv2.line(frame, (x+w, y), (x+w-corner_len, y), color, 2)
             cv2.line(frame, (x+w, y), (x+w, y+corner_len), color, 2)
-            # Bottom-left
             cv2.line(frame, (x, y+h), (x+corner_len, y+h), color, 2)
             cv2.line(frame, (x, y+h), (x, y+h-corner_len), color, 2)
-            # Bottom-right
             cv2.line(frame, (x+w, y+h), (x+w-corner_len, y+h), color, 2)
             cv2.line(frame, (x+w, y+h), (x+w, y+h-corner_len), color, 2)
         
@@ -247,7 +245,6 @@ class LiveSpoofDetector:
         # Stats
         cv2.putText(frame, f"FPS: {self.fps:.1f}", (20, 115),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        
         cv2.putText(frame, f"Threshold: {self.threshold:.2f}", (20, 135),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
         
@@ -258,7 +255,6 @@ class LiveSpoofDetector:
         # Counters
         cv2.putText(frame, f"Real: {self.real_count}", (20, 175),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-        
         cv2.putText(frame, f"Spoof: {self.spoof_count}", (120, 175),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
         
@@ -284,14 +280,12 @@ class LiveSpoofDetector:
 
     def run(self):
         """Main loop for live prediction"""
-        # Open camera
         cap = cv2.VideoCapture(self.camera_id)
         
         if not cap.isOpened():
             print("❌ Could not open camera")
             return
         
-        # Set camera properties
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         cap.set(cv2.CAP_PROP_FPS, 30)
@@ -307,51 +301,31 @@ class LiveSpoofDetector:
         
         try:
             while True:
-                # Read frame
                 ret, frame = cap.read()
-                
                 if not ret:
                     print("❌ Failed to grab frame")
                     break
                 
-                # Flip horizontally for mirror effect
                 frame = cv2.flip(frame, 1)
-                
-                # Make prediction
                 class_name, confidence, color, bbox, face_conf = self.predict_frame(frame)
-                
-                # Update FPS
                 self.update_fps()
-                
-                # Draw information
-                frame = self.draw_info(frame, class_name, confidence, color, 
-                                      bbox, face_conf)
-                
-                # Show frame
+                frame = self.draw_info(frame, class_name, confidence, color, bbox, face_conf)
                 cv2.imshow('Live Spoof Detection', frame)
                 
-                # Handle key presses
                 key = cv2.waitKey(1) & 0xFF
-                
                 if key == ord('q'):
-                    print("\n👋 Quitting...")
                     break
-                    
                 elif key == ord('s'):
-                    # Save screenshot
                     timestamp = int(time.time())
                     filename = f"screenshot_{timestamp}.jpg"
                     cv2.imwrite(filename, frame)
                     print(f"💾 Screenshot saved: {filename}")
-                    
                 elif key == ord('+') or key == ord('='):
                     self.threshold = min(1.0, self.threshold + 0.05)
                     print(f"📈 Threshold: {self.threshold:.2f}")
-                    
                 elif key == ord('-') or key == ord('_'):
                     self.threshold = max(0.0, self.threshold - 0.05)
                     print(f"📉 Threshold: {self.threshold:.2f}")
-                    
                 elif key == ord('f'):
                     self.use_face_detection = not self.use_face_detection
                     status = "ON" if self.use_face_detection else "OFF"
@@ -359,13 +333,9 @@ class LiveSpoofDetector:
                     
         except KeyboardInterrupt:
             print("\n\n🛑 Interrupted by user")
-            
         finally:
-            # Clean up
             cap.release()
             cv2.destroyAllWindows()
-            
-            # Print session stats
             print("\n" + "="*60)
             print("📊 SESSION STATISTICS")
             print("="*60)
@@ -391,18 +361,10 @@ def main():
     
     args = parser.parse_args()
     
-    # Check if model exists
     if not os.path.exists(args.model):
         print(f"❌ Model not found: {args.model}")
-        # Try alternative paths
-        alt_model = os.path.join(MODELS_DIR, 'best_model_phase1.h5')
-        if os.path.exists(alt_model):
-            print(f"✅ Found alternative model: {alt_model}")
-            args.model = alt_model
-        else:
-            return
+        return
     
-    # Create and run detector
     try:
         detector = LiveSpoofDetector(
             model_path=args.model,
