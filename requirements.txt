@@ -7,3 +7,4 @@ Pillow==10.0.0
 tensorflow-cpu==2.13.0
 protobuf==3.20.3
 setuptools==65.5.0
+av==10.0.0
