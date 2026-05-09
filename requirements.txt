@@ -8,4 +8,3 @@ protobuf==3.20.3
 setuptools==65.5.0
 wheel==0.45.1
 streamlit-webrtc==0.45.1
-av==9.2.0
